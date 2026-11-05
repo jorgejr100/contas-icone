@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Falar compra</title>
+<style>
+:root { color-scheme: dark; }
+body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 24px 16px; box-sizing: border-box;
+  background: #202124; color: #e8eaed; font: 17px/1.4 Roboto, "Segoe UI", system-ui, sans-serif; text-align: center; }
+#mic { width: 132px; height: 132px; border-radius: 50%; border: 0; font-size: 56px; background: #8ab4f8; color: #202124; cursor: pointer; }
+#mic.on { background: #f28b82; animation: pulso 1.2s infinite; }
+@keyframes pulso { 50% { transform: scale(1.06); } }
+#fala { min-height: 3em; max-width: 520px; font-size: 20px; }
+#status { color: #9aa0a6; font-size: 15px; max-width: 520px; }
+.ex { color: #9aa0a6; font-size: 14px; max-width: 520px; }
+</style>
+</head>
+<body>
+<button id="mic" aria-label="Falar">🎤</button>
+<div id="status">Toque no microfone e diga a compra</div>
+<div id="fala"></div>
+<div class="ex">Ex.: “compra Nubank, data de hoje, no valor de 1000, parcelado em 10x, local Mercado”</div>
+<script>
+// Página de voz do app Contas Mensais. O app (Apps Script) não pode usar o microfone dentro da moldura do Google,
+// então abre esta página numa aba própria; ela ouve, devolve a frase só para a aba do app que a abriu e se fecha.
+// Não guarda nem envia nada a servidor algum.
+const $ = (id) => document.getElementById(id);
+const st = (t) => { $('status').textContent = t; };
+const destino = new URLSearchParams(location.hash.slice(1)).get('o') || '';
+const valido = /^https:\/\/[a-z0-9-]+-script\.googleusercontent\.com$/.test(destino);
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let r = null, texto = '';
+
+function entregar() {
+  if (!texto) { st('Não ouvi nada. Toque no microfone e tente de novo.'); return; }
+  if (!window.opener) { st('Não consegui voltar ao app (a aba do app não está ligada a esta). Volte ao app e me avise.'); return; }
+  window.opener.postMessage({ tipo: 'contas-voz', fala: texto }, destino);
+  st('Enviado. Voltando ao app…');
+  setTimeout(() => window.close(), 400);
+}
+function ouvir() {
+  if (r) { r.stop(); return; }   // tocar de novo = parar
+  if (!valido) { st('Abra esta página pelo botão 🎤 do app.'); return; }
+  if (!SR) { st('Este navegador não tem reconhecimento de voz.'); return; }
+  texto = ''; $('fala').textContent = '';
+  r = new SR(); r.lang = 'pt-BR'; r.interimResults = true; r.continuous = false;
+  r.onstart = () => { $('mic').classList.add('on'); st('Ouvindo… pode falar'); };
+  r.onresult = (e) => {
+    texto = [...e.results].map((x) => x[0].transcript).join(' ').trim();
+    $('fala').textContent = texto;
+    if (e.results[e.results.length - 1].isFinal) r.stop();
+  };
+  r.onerror = (e) => st('Falhou: ' + e.error + (e.error === 'not-allowed' ? ' (permita o microfone para este site no Chrome)' : ''));
+  r.onend = () => { $('mic').classList.remove('on'); r = null; if (texto) entregar(); };
+  try { r.start(); } catch (e) { r = null; st('Toque no microfone para começar.'); }
+}
+$('mic').onclick = ouvir;
+if (!valido) st('Abra esta página pelo botão 🎤 do app.');
+else ouvir();   // já abre ouvindo; se o Chrome pedir um toque, o botão resolve
+</script>
+</body>
+</html>
